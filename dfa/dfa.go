@@ -36,7 +36,8 @@ type DFA struct {
 // NewDFA creates a new DFA
 func NewDFA(name string) *DFA {
 	return &DFA{
-		Name: name,
+		Name:    name,
+		Indexed: false,
 	}
 }
 
@@ -56,6 +57,7 @@ func (m *DFA) SetState(state *State) {
 		m.States = make(map[string]*State)
 	}
 	m.States[state.Name] = state
+	m.Indexed = false
 }
 
 // SetStates is able to set multiple states at once
@@ -131,10 +133,7 @@ func (m *DFA) Index() {
 // from a symbol to a symbol. It answers the questions which state
 // is in between these two symbols.
 func (m *DFA) InspectStates(from, to string) []string {
-	if !m.Indexed {
-		m.Index()
-		m.Indexed = true
-	}
+	m.ensureIndexed()
 	if states, ok := m.StateLookup[m.buildKey(from, to)]; ok {
 		return states
 	}
@@ -145,14 +144,31 @@ func (m *DFA) InspectStates(from, to string) []string {
 // from a symbol to a symbol. It answers the questions which state
 // is in between these two symbols.
 func (m *DFA) InspectSymbols(symbol string) []*Edge {
-	if !m.Indexed {
-		m.Index()
-		m.Indexed = true
-	}
+	m.ensureIndexed()
 	if states, ok := m.EdgeLookup[symbol]; ok {
 		return states
 	}
 	return nil
+}
+
+// GetSymbols returns distinct symbols used in this DFA
+func (m *DFA) GetSymbols() []string {
+	var symbols []string
+	m.ensureIndexed()
+	for s := range m.EdgeLookup {
+		if !contains(symbols, s) {
+			symbols = append(symbols, s)
+		}
+	}
+	return symbols
+}
+
+// ensureIndexed ensures that the DFA was indexed before
+func (m *DFA) ensureIndexed() {
+	if !m.Indexed {
+		m.Index()
+		m.Indexed = true
+	}
 }
 
 // Run runs the DFA from the starting point with the given events
@@ -182,4 +198,14 @@ func (m *DFA) Run(tokens []string) ([]string, bool) {
 		current = state
 	}
 	return path, true
+}
+
+// Classic contains function
+func contains(s []string, e string) bool {
+	for _, a := range s {
+		if a == e {
+			return true
+		}
+	}
+	return false
 }
