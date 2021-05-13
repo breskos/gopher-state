@@ -12,11 +12,13 @@ const (
 	directionDelimiter  = "->"
 )
 
+// Edge represents a connection from a state to a state
 type Edge struct {
 	From string
 	To   string
 }
 
+// DFA holds everything that is needed in order to execute the automaton.
 type DFA struct {
 	Name string
 	// States holds the state name as well as the state structure
@@ -31,20 +33,24 @@ type DFA struct {
 	Start      string
 }
 
+// NewDFA creates a new DFA
 func NewDFA(name string) *DFA {
 	return &DFA{
 		Name: name,
 	}
 }
 
+// SetStart sets the starting point of the DFA.
 func (m *DFA) SetStart(state string) {
 	m.Start = state
 }
 
+// GetStart returns the starting point of the DFA.
 func (m *DFA) GetStart() string {
 	return m.Start
 }
 
+// SetSetate sets one state
 func (m *DFA) SetState(state *State) {
 	if m.States == nil {
 		m.States = make(map[string]*State)
@@ -52,25 +58,27 @@ func (m *DFA) SetState(state *State) {
 	m.States[state.Name] = state
 }
 
+// SetStates is able to set multiple states at once
 func (m *DFA) SetStates(states []*State) {
-	if m.States == nil {
-		m.States = make(map[string]*State)
-	}
 	for _, state := range states {
-		m.States[state.Name] = state
+		m.SetState(state)
 	}
 }
 
-func (m *DFA) GetState(name string) (*State, bool) {
-	if m.States[name] == nil {
-		return nil, false
+// GetState returns the specific state with a given name
+func (m *DFA) GetState(name string) *State {
+	if m.StateExists(name) {
+		return m.States[name]
 	}
-	return m.States[name], true
+	return nil
 }
 
+// StateExists tests if the state exists
 func (m *DFA) StateExists(name string) bool {
-	_, ok := m.GetState(name)
-	return ok
+	if m.States[name] == nil {
+		return false
+	}
+	return true
 }
 
 // Step executes one step in the DFA and determines if this step
