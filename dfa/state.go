@@ -18,6 +18,11 @@ func NewState(name string) *State {
 	}
 }
 
+// GetTransitions returns the symbols that would lead to a transition
+func (s *State) GetTransitions() map[string]string {
+	return s.Transitions
+}
+
 // AddTransitions adds a bulk of symbols to the state that all end up in the same state
 func (s *State) AddTransitions(state *State, symbols []string) {
 	for _, symbol := range symbols {
