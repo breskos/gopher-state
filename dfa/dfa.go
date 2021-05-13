@@ -12,15 +12,23 @@ const (
 	directionDelimiter  = "->"
 )
 
+type Edge struct {
+	From string
+	To   string
+}
+
 type DFA struct {
 	Name string
 	// States holds the state name as well as the state structure
 	States map[string]*State
-	// Lookup holds key: symbol->symbol and all the states that
+	// StateLookup holds key: symbol->symbol and all the states that
 	// are in between of this symbol->state->symbol constellation.
-	Lookup  map[string][]string
-	Indexed bool
-	Start   string
+	StateLookup map[string][]string
+	// EdgeLookup holds key: symbol and as value all state pairs that
+	// are connected by this symbol.
+	EdgeLookup map[string][]*Edge
+	Indexed    bool
+	Start      string
 }
 
 func NewDFA(name string) *DFA {
@@ -65,6 +73,8 @@ func (m *DFA) StateExists(name string) bool {
 	return ok
 }
 
+// Step executes one step in the DFA and determines if this step
+// is possible within this automaton.
 func (m *DFA) Step(state, symbol string) (string, bool, error) {
 	if m.States[state] == nil {
 		return "", false, errors.New(errStateNotExistent)
@@ -80,34 +90,61 @@ func (m *DFA) buildKey(from, to string) string {
 	return hex.EncodeToString(data[:])
 }
 
+// Index indexes all symbol to symbol transitions with the states
+// that are in between. And also indexes a symbol with all the
+// state pairs where it is in between.
 func (m *DFA) Index() {
-	m.Lookup = make(map[string][]string)
+	m.StateLookup = make(map[string][]string)
+	m.EdgeLookup = make(map[string][]*Edge)
 	for _, state := range m.States {
 		for symbol1, transition := range state.Transitions {
+			// StateLookup
 			for symbol2 := range m.States[transition].Transitions {
 				hash := m.buildKey(symbol1, symbol2)
-				if _, ok := m.Lookup[hash]; !ok {
-					m.Lookup[hash] = make([]string, 0)
+				if _, ok := m.StateLookup[hash]; !ok {
+					m.StateLookup[hash] = make([]string, 0)
 				}
-				m.Lookup[hash] = append(m.Lookup[hash], transition)
+				m.StateLookup[hash] = append(m.StateLookup[hash], transition)
 			}
+			// SymbolLookup
+			if m.EdgeLookup[symbol1] == nil {
+				m.EdgeLookup[symbol1] = make([]*Edge, 0)
+			}
+			m.EdgeLookup[symbol1] = append(m.EdgeLookup[symbol1], &Edge{
+				From: state.Name,
+				To:   transition,
+			})
 		}
 	}
 	m.Indexed = true
 }
 
-// Inspect returns (if indexed) all states that have a connection
-// from a symbol to a symbol. It answers the questions if a state
+// InspectStates returns (if indexed) all states that have a connection
+// from a symbol to a symbol. It answers the questions which state
 // is in between these two symbols.
-func (m *DFA) Inspect(from, to string) []string {
+func (m *DFA) InspectStates(from, to string) []string {
 	if !m.Indexed {
 		m.Index()
 		m.Indexed = true
 	}
-	if states, ok := m.Lookup[m.buildKey(from, to)]; ok {
+	if states, ok := m.StateLookup[m.buildKey(from, to)]; ok {
 		return states
 	}
 	return []string{}
+}
+
+// InspectSymbols returns (if indexed) all states that have a connection
+// from a symbol to a symbol. It answers the questions which state
+// is in between these two symbols.
+func (m *DFA) InspectSymbols(symbol string) []*Edge {
+	if !m.Indexed {
+		m.Index()
+		m.Indexed = true
+	}
+	if states, ok := m.EdgeLookup[symbol]; ok {
+		return states
+	}
+	return nil
 }
 
 // Run runs the DFA from the starting point with the given events

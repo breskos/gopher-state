@@ -4,7 +4,7 @@ type State struct {
 	// Name represents the name of the state
 	Name string
 	// Transitions represents the transitions of the state.
-	// The map is strucutred map[Symbol]State
+	// The map is structured map[Symbol]State
 	Transitions map[string]string
 	Final       bool
 }
