@@ -1,6 +1,7 @@
 package dfa
 
 import (
+	"crypto/md5"
 	"encoding/hex"
 	"errors"
 	"log"
@@ -97,7 +98,8 @@ func (m *DFA) Step(state, symbol string) (string, bool, error) {
 
 func (m *DFA) buildKey(from, to string) string {
 	data := []byte(strings.Join([]string{from, to}, directionDelimiter))
-	return hex.EncodeToString(data[:])
+	hash := md5.Sum(data)
+	return hex.EncodeToString(hash[:])
 }
 
 // Index indexes all symbol to symbol transitions with the states
