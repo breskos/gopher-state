@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "start": "home",
+  "states": ["home", "square"],
+  "transitions": [
+    {"id": "walk-to-square", "from": "home", "to": "square", "event": "walk"}
+  ]
+}
