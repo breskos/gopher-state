@@ -1,10 +1,14 @@
+// Package dfa provides the original mutable, string-based DFA API.
+// For validated, immutable automata use the module's root package.
 package dfa
 
 import (
 	"crypto/md5"
 	"encoding/hex"
 	"errors"
-	"log"
+	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -24,14 +28,13 @@ type DFA struct {
 	Name string
 	// States holds the state name as well as the state structure
 	States map[string]*State
-	// StateLookup holds key: symbol->symbol and all the states that
-	// are in between of this symbol->state->symbol constellation.
+	// StateLookup is a legacy snapshot populated by Index.
 	StateLookup map[string][]string
-	// EdgeLookup holds key: symbol and as value all state pairs that
-	// are connected by this symbol.
+	// EdgeLookup is a legacy snapshot populated by Index.
 	EdgeLookup map[string][]*Edge
-	Indexed    bool
-	Start      string
+	// Indexed reports whether a snapshot has been built since the last SetState.
+	Indexed bool
+	Start   string
 }
 
 // NewDFA creates a new DFA
@@ -52,7 +55,7 @@ func (m *DFA) GetStart() string {
 	return m.Start
 }
 
-// SetSetate sets one state
+// SetState sets one state
 func (m *DFA) SetState(state *State) {
 	if m.States == nil {
 		m.States = make(map[string]*State)
@@ -91,13 +94,19 @@ func (m *DFA) Step(state, symbol string) (string, bool, error) {
 		return "", false, errors.New(errStateNotExistent)
 	}
 	if next, ok := m.States[state].Via(symbol); ok {
+		if !m.StateExists(next) {
+			return "", false, fmt.Errorf("%s: %q", errStateNotExistent, next)
+		}
 		return next, true, nil
 	}
 	return "", false, nil
 }
 
 func (m *DFA) buildKey(from, to string) string {
-	data := []byte(strings.Join([]string{from, to}, directionDelimiter))
+	if strings.Contains(from, directionDelimiter) || strings.Contains(to, directionDelimiter) {
+		return ":" + strconv.Quote(from) + ":" + strconv.Quote(to)
+	}
+	data := []byte(from + directionDelimiter + to)
 	hash := md5.Sum(data)
 	return hex.EncodeToString(hash[:])
 }
@@ -109,19 +118,23 @@ func (m *DFA) Index() {
 	m.StateLookup = make(map[string][]string)
 	m.EdgeLookup = make(map[string][]*Edge)
 	for _, state := range m.States {
+		if state == nil {
+			continue
+		}
 		for symbol1, transition := range state.Transitions {
 			// StateLookup
-			for symbol2 := range m.States[transition].Transitions {
-				hash := m.buildKey(symbol1, symbol2)
-				if _, ok := m.StateLookup[hash]; !ok {
-					m.StateLookup[hash] = make([]string, 0)
+			target := m.States[transition]
+			if target == nil {
+				continue
+			}
+			for symbol2, end := range target.Transitions {
+				if !m.StateExists(end) {
+					continue
 				}
+				hash := m.buildKey(symbol1, symbol2)
 				m.StateLookup[hash] = append(m.StateLookup[hash], transition)
 			}
 			// SymbolLookup
-			if m.EdgeLookup[symbol1] == nil {
-				m.EdgeLookup[symbol1] = make([]*Edge, 0)
-			}
 			m.EdgeLookup[symbol1] = append(m.EdgeLookup[symbol1], &Edge{
 				From: state.Name,
 				To:   transition,
@@ -131,83 +144,93 @@ func (m *DFA) Index() {
 	m.Indexed = true
 }
 
-// InspectStates returns (if indexed) all states that have a connection
-// from a symbol to a symbol. It answers the questions which state
-// is in between these two symbols.
+// InspectStates returns the intermediate state names for paths with the
+// given pair of symbols. Each source state with such a path contributes an entry.
 func (m *DFA) InspectStates(from, to string) []string {
-	m.ensureIndexed()
-	if states, ok := m.StateLookup[m.buildKey(from, to)]; ok {
-		return states
-	}
-	return []string{}
-}
-
-// InspectSymbols returns (if indexed) all states that have a connection
-// from a symbol to a symbol. It answers the questions which state
-// is in between these two symbols.
-func (m *DFA) InspectSymbols(symbol string) []*Edge {
-	m.ensureIndexed()
-	if states, ok := m.EdgeLookup[symbol]; ok {
-		return states
-	}
-	return nil
-}
-
-// GetSymbols returns distinct symbols used in this DFA
-func (m *DFA) GetSymbols() []string {
-	var symbols []string
-	m.ensureIndexed()
-	for s := range m.EdgeLookup {
-		if !contains(symbols, s) {
-			symbols = append(symbols, s)
+	states := []string{}
+	for _, state := range m.States {
+		if state == nil {
+			continue
+		}
+		next, ok := state.Via(from)
+		if !ok || !m.StateExists(next) {
+			continue
+		}
+		target, ok := m.States[next].Via(to)
+		if ok && m.StateExists(target) {
+			states = append(states, next)
 		}
 	}
+	sort.Strings(states)
+	return states
+}
+
+// InspectSymbols returns the edges labeled with symbol.
+func (m *DFA) InspectSymbols(symbol string) []*Edge {
+	var edges []*Edge
+	for _, state := range m.States {
+		if state == nil {
+			continue
+		}
+		target, ok := state.Via(symbol)
+		if ok && m.StateExists(target) {
+			edges = append(edges, &Edge{From: state.Name, To: target})
+		}
+	}
+	sort.Slice(edges, func(i, j int) bool {
+		if edges[i].From == edges[j].From {
+			return edges[i].To < edges[j].To
+		}
+		return edges[i].From < edges[j].From
+	})
+	return edges
+}
+
+// GetSymbols returns the distinct symbols with valid transitions in sorted order.
+func (m *DFA) GetSymbols() []string {
+	unique := make(map[string]struct{})
+	for _, state := range m.States {
+		if state == nil {
+			continue
+		}
+		for symbol, target := range state.Transitions {
+			if m.StateExists(target) {
+				unique[symbol] = struct{}{}
+			}
+		}
+	}
+	var symbols []string
+	for symbol := range unique {
+		symbols = append(symbols, symbol)
+	}
+	sort.Strings(symbols)
 	return symbols
 }
 
-// ensureIndexed ensures that the DFA was indexed before
-func (m *DFA) ensureIndexed() {
-	if !m.Indexed {
-		m.Index()
-		m.Indexed = true
-	}
-}
-
-// Run runs the DFA from the starting point with the given events
-// and returns the states that the events have taken
+// Run returns the visited path and whether the entire input was accepted.
+// Invalid configurations yield false. Use RunChecked for error details.
 func (m *DFA) Run(tokens []string) ([]string, bool) {
-	var path []string
-	if m.States == nil {
-		log.Fatal("not able to run() DFA, no states")
-	}
-	if _, ok := m.States[m.Start]; !ok {
-		log.Fatal("not able to run() DFA, no start state")
-	}
-	current := m.Start
-	for _, token := range tokens {
-		path = append(path, current)
-		if m.States[current] == nil {
-			log.Fatalf("state not existent")
-		}
-
-		if m.States[current].Final {
-			return path, true
-		}
-		state, ok := m.States[current].Via(token)
-		if !ok {
-			return path, false
-		}
-		current = state
-	}
-	return path, true
+	path, accepted, _ := m.RunChecked(tokens)
+	return path, accepted
 }
 
-// Classic contains function
-func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
+// RunChecked returns the path, including the start state and each state
+// reached by a successful step, and whether the entire input was accepted.
+// A missing transition rejects the input. An invalid start or a traversed
+// transition to an unregistered state returns an error.
+func (m *DFA) RunChecked(tokens []string) ([]string, bool, error) {
+	current := m.Start
+	if !m.StateExists(current) {
+		return nil, false, fmt.Errorf("invalid start state %q", current)
 	}
-	return false
+	path := []string{current}
+	for _, token := range tokens {
+		next, ok, err := m.Step(current, token)
+		if !ok {
+			return path, false, err
+		}
+		path = append(path, next)
+		current = next
+	}
+	return path, m.States[current].Final, nil
 }
