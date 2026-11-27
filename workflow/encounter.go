@@ -96,16 +96,7 @@ func (e *Encounter) Options(r *Run, event string, facts Facts) []Option {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	var options []Option
-	personal := r.world.Snapshot().states[r.state][event]
-	if personal != nil {
-		for i := range personal.edges {
-			t := &personal.edges[i]
-			if t.chance != 0 && t.eligible(facts) {
-				options = append(options, makeOption(Private, t.decision(r.state, event), nil, t, personal.selection))
-			}
-		}
-	}
+	options := r.world.Snapshot().Options(r.state, event, facts)
 	mapping := e.people[r]
 	from := mapping.shared[r.state]
 	if e.closed || from == "" {
@@ -146,22 +137,7 @@ func (e *Encounter) Step(r *Run, scope Scope, event, transition string, facts Fa
 
 	switch scope {
 	case Private:
-		engine := r.world.Snapshot()
-		if transition == "" {
-			selected, selection, err := engine.choose(r.state, event, facts, r.draw)
-			if err != nil || selected == nil {
-				return Decision{}, false, err
-			}
-			return r.advance(selected, selection, selected.decision(r.state, event), facts, "", nil)
-		}
-		g := engine.states[r.state][event]
-		selected, err := chooseMeetingEdge(g, transition, r.draw, func(t *edge) bool {
-			return t.eligible(facts)
-		})
-		if err != nil || selected == nil {
-			return Decision{}, false, err
-		}
-		return r.advance(selected, g.selection, selected.decision(r.state, event), facts, "", nil)
+		return r.stepOn(r.world.Snapshot(), event, transition, facts)
 	case Shared:
 		mapping := e.people[r]
 		from := mapping.shared[r.state]

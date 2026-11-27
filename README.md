@@ -601,3 +601,101 @@ exercise missing mappings, invalid bindings, failed eligibility, invalid
 random draws, closure, concurrent joint actions, and group recorder failures.
 The encounter fuzz test varies both wallets and both kinds of random draw
 and checks the joint decision against the festival's expected rules.
+
+### Let an external processor generate actions and graph branches
+
+A processor in a separate Go project can call `run.Options(event, facts)`,
+score the returned edges, and submit the chosen ID through
+`run.StepTransition(event, id, latestFacts)`. The ordinary `run.Step` API
+still lets the graph choose. An explicit choice bypasses relative weights
+and declaration order. Its conditions, minimum requirements, and absolute
+execution probability still apply. Option lists reserve nothing: supply
+the latest facts when executing the action.
+
+Use `run.ApplyAction` to attach a graph extension to an explicit choice or
+`run.ApplyActionJSON(reader, maxBytes)` to accept a bounded JSON action
+from a processor. The action contains an `event`, a `transition` ID, the
+current `facts`, and an optional `patch` containing new states and
+transitions. The chosen edge can be an existing edge or an edge declared
+in that patch. For example, [the discovery action](workflow/testdata/discover-action.json)
+creates a hidden garden, a greenhouse, and a fountain. It enters the garden
+only if the person has a key, then exposes two new weighted options.
+
+The engine validates the patch against the latest world before evaluating
+the chosen edge. It publishes the complete extension when the transition
+and its optional record succeed. When validation fails, a requirement no
+longer holds, a probability draw rejects the transition, or the recorder
+reports an error, the engine retains the old graph and run state. Existing
+world snapshots are immutable. Other runs in the same world see the new
+branches on subsequent steps. Concurrent actions with distinct IDs
+retain both extensions. Reusing a state or edge ID is rejected.
+
+The [executable Go example](workflow/action_test.go) demonstrates the exchange
+between a processor and a run. The application supplies facts, generates IDs,
+and applies any inventory, time, or other external effects after success.
+An action's input JSON is separate from the transition audit log. Persist the
+action or patch through the application if the generated graph must be rebuilt
+later. Draw and recorder callbacks should avoid reentering the run or modifying
+its world while an action is in progress.
+
+#### Run the processor example
+
+From the repository root:
+
+```sh
+go run ./examples/processor workflow/testdata/live-base.json workflow/testdata/discover-action.json
+```
+
+```text
+Discovery: square -> hidden-garden
+Option: visit-greenhouse (weight 3)
+Option: visit-fountain (weight 1)
+Processor chose visit-fountain; explorer is now at fountain
+```
+
+The [base graph](workflow/testdata/live-base.json) only knows about home and
+the square. The [processor command](examples/processor/main.go) walks the
+explorer to the square, then reads a proposed action. That action defines
+the garden and both destinations. The normal weighted policy favors the
+greenhouse, while the example's external policy deliberately selects the
+fountain. To see the rejection path, copy the action file, change
+`"hasKey": true` to `"hasKey": false`, and pass the copy to the command.
+The explorer stays at the square and the proposed states remain unpublished.
+
+#### Build the processor boundary in another Go project
+
+Import `github.com/breskos/gopher-state/workflow`. Keep the processor's
+ranking, generation and application data in the consuming project. Supply
+named facts that the graph can read, such as location visibility, keys or
+available resources. Use this sequence for each decision:
+
+1. Read the candidate edges with `run.Options(event, facts)`. This does not
+   draw randomness. Use each option's transition ID to make or retain a
+   choice in your processor.
+2. Recalculate facts before submitting the choice if the world has changed.
+   Use `StepTransition` for an existing edge, or assemble an `Action`
+   with a patch if the result needs new graph nodes. A transition declared
+   in the patch can target a state declared there as well.
+3. Check the returned result. On `ok == true`, the decision contains the
+   actual source, target and chosen edge. It is now safe for the application
+   to proceed with the effects it owns. On `ok == false` with a nil error,
+   the requested edge was unavailable, its conditions failed or its
+   probability rejected the move. On an error, inspect the validation,
+   randomness or recorder failure. In both failure cases the generated
+   patch remains unpublished.
+
+| Action JSON field | Contract |
+| --- | --- |
+| `event` | Event under which the chosen edge is declared. |
+| `transition` | Required explicit edge ID. It must be available from the run's current state for that event. |
+| `facts` | Optional current facts for evaluating guards and minimum requirements. |
+| `patch.states` | Optional list of new state IDs. Allocate stable, unique IDs in the processor. |
+| `patch.transitions` | Optional list of new edges. They can connect existing states, new states, or both. |
+
+A world is append-only. Replaying a successful action that creates the same
+IDs conflicts with those existing IDs. Applications that retry across process
+or network failures should keep their own action IDs and record which ones
+committed. Persist the original graph and accepted patches in order if the
+generated graph must be reconstructed. Use a separate transaction in your
+storage layer when external resource effects and durable history must commit
+together.
