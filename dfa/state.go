@@ -26,11 +26,11 @@ func (s *State) GetTransitions() map[string]string {
 // AddTransitions adds a bulk of symbols to the state that all end up in the same state
 func (s *State) AddTransitions(state *State, symbols []string) {
 	for _, symbol := range symbols {
-		s.Transitions[symbol] = state.Name
+		s.AddTransition(state, symbol)
 	}
 }
 
-// AddTransitions adds a symbol that leads to a state - meaning a transition
+// AddTransition adds a symbol that leads to a state - meaning a transition
 func (s *State) AddTransition(state *State, symbol string) {
 	if s.Transitions == nil {
 		s.Transitions = make(map[string]string)
@@ -40,12 +40,8 @@ func (s *State) AddTransition(state *State, symbol string) {
 
 // Via is used by the DFA to find a transition using a symbol
 func (s *State) Via(symbol string) (string, bool) {
-	for key, state := range s.Transitions {
-		if key == symbol {
-			return state, true
-		}
-	}
-	return "", false
+	next, ok := s.Transitions[symbol]
+	return next, ok
 }
 
 // IsFinal tests if this state is a final state
