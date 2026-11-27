@@ -1,0 +1,11 @@
+{
+  "event": "plan",
+  "facts": {
+    "wallet": {"amount": 450, "unit": "EUR-cent"},
+    "water": {"amount": 2, "unit": "L"},
+    "distance": {"amount": 300, "unit": "m"},
+    "walkingLimit": {"amount": 500, "unit": "m"},
+    "timeAvailable": {"amount": 900, "unit": "s"},
+    "marketOpen": true
+  }
+}

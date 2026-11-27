@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "start": "pending",
+  "states": ["pending", "review", "express", "standard", "done"],
+  "transitions": [
+    {
+      "id": "manual-review",
+      "from": "pending",
+      "to": "review",
+      "event": "submit",
+      "when": {"field": "risk", "op": "gte", "value": 80}
+    },
+    {
+      "id": "offer-shipping",
+      "from": "pending",
+      "to": "standard",
+      "event": "submit"
+    },
+    {
+      "id": "pick-express",
+      "from": "standard",
+      "to": "express",
+      "event": "dispatch",
+      "selection": "weighted",
+      "weight": 1,
+      "when": {
+        "all": [
+          {"field": "expressAvailable", "op": "eq", "value": true},
+          {"not": {"field": "region", "op": "eq", "value": "remote"}}
+        ]
+      },
+      "metadata": {
+        "estimate": "5m",
+        "cost": {"currency": "EUR", "minorUnits": 250}
+      }
+    },
+    {
+      "id": "pick-standard",
+      "from": "standard",
+      "to": "done",
+      "event": "dispatch",
+      "selection": "weighted",
+      "weight": 3,
+      "metadata": {"estimate": "48h"}
+    },
+    {
+      "id": "complete-express",
+      "from": "express",
+      "to": "done",
+      "event": "delivered"
+    }
+  ]
+}

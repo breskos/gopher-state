@@ -1,0 +1,55 @@
+{
+  "public": {
+    "version": 1,
+    "start": "square",
+    "states": ["square", "stage", "food-stall"],
+    "transitions": [
+      {
+        "id": "see-concert",
+        "from": "square",
+        "to": "stage",
+        "event": "choose",
+        "selection": "weighted",
+        "weight": 3,
+        "probability": 0.8,
+        "requires": [{"field": "wallet", "atLeast": {"amount": 500, "unit": "EUR-cent"}}]
+      },
+      {
+        "id": "visit-food-stall",
+        "from": "square",
+        "to": "food-stall",
+        "event": "choose",
+        "selection": "weighted",
+        "weight": 1
+      }
+    ]
+  },
+  "people": [
+    {
+      "id": "Mia",
+      "facts": {"wallet": {"amount": 600, "unit": "EUR-cent"}},
+      "private": {
+        "version": 1,
+        "start": "mia-meeting-point",
+        "states": ["mia-meeting-point", "mia-concert", "mia-food", "library"],
+        "transitions": [
+          {"id": "visit-library", "from": "mia-meeting-point", "to": "library", "event": "choose"}
+        ]
+      },
+      "binding": {"square": "mia-meeting-point", "stage": "mia-concert", "food-stall": "mia-food"}
+    },
+    {
+      "id": "Noah",
+      "facts": {"wallet": {"amount": 300, "unit": "EUR-cent"}},
+      "private": {
+        "version": 1,
+        "start": "noah-meeting-point",
+        "states": ["noah-meeting-point", "noah-concert", "noah-food", "bike-shop"],
+        "transitions": [
+          {"id": "visit-bike-shop", "from": "noah-meeting-point", "to": "bike-shop", "event": "choose"}
+        ]
+      },
+      "binding": {"square": "noah-meeting-point", "stage": "noah-concert", "food-stall": "noah-food"}
+    }
+  ]
+}

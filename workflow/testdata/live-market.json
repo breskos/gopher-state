@@ -1,0 +1,25 @@
+{
+  "states": ["pop-up-market", "market-cafe"],
+  "transitions": [
+    {
+      "id": "visit-pop-up",
+      "from": "square",
+      "to": "pop-up-market",
+      "event": "explore",
+      "selection": "weighted",
+      "weight": 3,
+      "probability": 0.8,
+      "requires": [{"field": "wallet", "atLeast": {"amount": 250, "unit": "EUR-cent"}}],
+      "when": {"field": "marketOpen", "op": "eq", "value": true}
+    },
+    {
+      "id": "visit-cafe",
+      "from": "square",
+      "to": "market-cafe",
+      "event": "explore",
+      "selection": "weighted",
+      "weight": 1
+    },
+    {"id": "leave-market", "from": "pop-up-market", "to": "square", "event": "leave"}
+  ]
+}

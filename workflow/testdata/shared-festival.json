@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "start": "square",
+  "states": ["square", "stage", "food-stall"],
+  "transitions": [
+    {
+      "id": "see-concert",
+      "from": "square",
+      "to": "stage",
+      "event": "choose",
+      "selection": "weighted",
+      "weight": 3,
+      "probability": 0.8,
+      "requires": [{"field": "wallet", "atLeast": {"amount": 500, "unit": "EUR-cent"}}]
+    },
+    {
+      "id": "visit-food-stall",
+      "from": "square",
+      "to": "food-stall",
+      "event": "choose",
+      "selection": "weighted",
+      "weight": 1
+    }
+  ]
+}

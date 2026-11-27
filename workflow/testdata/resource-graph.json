@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "start": "home",
+  "states": ["home", "market", "home-office"],
+  "transitions": [
+    {
+      "id": "visit-market",
+      "from": "home",
+      "to": "market",
+      "event": "plan",
+      "requires": [
+        {"field": "wallet", "atLeast": {"amount": 250, "unit": "EUR-cent"}},
+        {"field": "water", "atLeast": {"amount": 2, "unit": "L"}}
+      ],
+      "when": {
+        "all": [
+          {"field": "distance", "op": "lte", "otherField": "walkingLimit"},
+          {"field": "timeAvailable", "op": "gte", "value": {"amount": 600, "unit": "s"}},
+          {"field": "marketOpen", "op": "eq", "value": true}
+        ]
+      },
+      "probability": 0.8,
+      "metadata": {"cost": {"amount": 250, "unit": "EUR-cent"}}
+    },
+    {
+      "id": "work-from-home",
+      "from": "home",
+      "to": "home-office",
+      "event": "plan"
+    }
+  ]
+}

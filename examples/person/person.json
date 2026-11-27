@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "start": "home",
+  "states": ["home", "market", "bakery", "park", "head-home", "done"],
+  "transitions": [
+    {
+      "id": "walk-to-market",
+      "from": "home",
+      "to": "market",
+      "event": "plan",
+      "selection": "weighted",
+      "weight": 3,
+      "when": {"field": "marketPossible", "op": "eq", "value": true},
+      "metadata": {"meters": 300}
+    },
+    {
+      "id": "walk-to-bakery",
+      "from": "home",
+      "to": "bakery",
+      "event": "plan",
+      "selection": "weighted",
+      "weight": 1,
+      "when": {"field": "bakeryPossible", "op": "eq", "value": true},
+      "metadata": {"meters": 120}
+    },
+    {
+      "id": "walk-to-park",
+      "from": "home",
+      "to": "park",
+      "event": "plan",
+      "selection": "weighted",
+      "weight": 1,
+      "when": {"all": [
+        {"field": "marketPossible", "op": "eq", "value": false},
+        {"field": "bakeryPossible", "op": "eq", "value": false},
+        {"field": "parkPossible", "op": "eq", "value": true},
+        {"not": {"field": "raining", "op": "eq", "value": true}}
+      ]},
+      "metadata": {"meters": 80}
+    },
+    {
+      "id": "stay-home",
+      "from": "home",
+      "to": "done",
+      "event": "plan",
+      "selection": "weighted",
+      "weight": 1,
+      "when": {"all": [
+        {"field": "marketPossible", "op": "eq", "value": false},
+        {"field": "bakeryPossible", "op": "eq", "value": false},
+        {"any": [
+          {"field": "parkPossible", "op": "eq", "value": false},
+          {"field": "raining", "op": "eq", "value": true}
+        ]}
+      ]}
+    },
+    {
+      "id": "buy-lunch",
+      "from": "market",
+      "to": "head-home",
+      "event": "shop",
+      "when": {"all": [
+        {"field": "spendable", "op": "gte", "otherField": "lunchPrice"},
+        {"field": "shoppingTime", "op": "gte", "otherField": "lunchDuration"}
+      ]},
+      "metadata": {"priceCents": 650, "seconds": 60}
+    },
+    {
+      "id": "buy-fruit",
+      "from": "market",
+      "to": "head-home",
+      "event": "shop",
+      "when": {"all": [
+        {"field": "spendable", "op": "gte", "otherField": "fruitPrice"},
+        {"field": "shoppingTime", "op": "gte", "otherField": "fruitDuration"}
+      ]},
+      "metadata": {"priceCents": 250, "seconds": 30}
+    },
+    {
+      "id": "leave-market",
+      "from": "market",
+      "to": "head-home",
+      "event": "shop"
+    },
+    {
+      "id": "buy-pastry",
+      "from": "bakery",
+      "to": "head-home",
+      "event": "shop",
+      "when": {"all": [
+        {"field": "spendable", "op": "gte", "otherField": "pastryPrice"},
+        {"field": "shoppingTime", "op": "gte", "otherField": "pastryDuration"}
+      ]},
+      "metadata": {"priceCents": 180, "seconds": 20}
+    },
+    {
+      "id": "leave-bakery",
+      "from": "bakery",
+      "to": "head-home",
+      "event": "shop"
+    },
+    {
+      "id": "return-from-park",
+      "from": "park",
+      "to": "done",
+      "event": "return"
+    },
+    {
+      "id": "return-from-shop",
+      "from": "head-home",
+      "to": "done",
+      "event": "return"
+    }
+  ]
+}
