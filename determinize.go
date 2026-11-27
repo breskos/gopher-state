@@ -28,10 +28,9 @@ func (n *NFA[S]) Determinize(maxStates int) (*DFA[S], error) {
 
 	for i := 0; i < len(subsets); i++ {
 		current := subsets[i]
-		accepting := false
+		accepting := n.acceptsSubset(current)
 		destinations := make(map[S][]int)
 		for _, state := range current {
-			accepting = accepting || n.final[state]
 			row := &n.rows[state]
 			if len(row.targets) > 0 {
 				destinations[row.symbol] = append(destinations[row.symbol], row.targets...)
@@ -73,9 +72,12 @@ func (n *NFA[S]) Determinize(maxStates int) (*DFA[S], error) {
 }
 
 func subsetKey(states []int) string {
-	encoded := make([]byte, 0, len(states))
+	return string(appendSubsetKey(make([]byte, 0, len(states)), states))
+}
+
+func appendSubsetKey(encoded []byte, states []int) []byte {
 	for _, state := range states {
 		encoded = binary.AppendUvarint(encoded, uint64(state))
 	}
-	return string(encoded)
+	return encoded
 }

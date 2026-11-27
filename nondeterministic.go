@@ -120,30 +120,41 @@ func (m *NFAMatcher[S]) Match(input []S) bool {
 }
 
 func (n *NFA[S]) match(input []S, first, second []int, seen []bool) bool {
-	current, next := n.initial, first
-	spare := second
+	return n.matchFrom(input, n.initial, first, second, seen)
+}
+
+func (n *NFA[S]) matchFrom(input []S, current, next, spare []int, seen []bool) bool {
 	for _, symbol := range input {
 		if n.checkSymbol && !validSymbol(symbol) {
 			return false
 		}
-		for _, state := range current {
-			for _, target := range n.rows[state].step(symbol) {
-				if !seen[target] {
-					seen[target] = true
-					next = append(next, target)
-				}
-			}
-		}
+		next = n.advance(current, symbol, next, seen)
 		if len(next) == 0 {
 			return false
 		}
-		next = n.close(next, seen)
-		for _, state := range next {
-			seen[state] = false
-		}
 		current, next, spare = next, spare[:0], next
 	}
+	return n.acceptsSubset(current)
+}
+
+func (n *NFA[S]) advance(current []int, symbol S, next []int, seen []bool) []int {
 	for _, state := range current {
+		for _, target := range n.rows[state].step(symbol) {
+			if !seen[target] {
+				seen[target] = true
+				next = append(next, target)
+			}
+		}
+	}
+	next = n.close(next, seen)
+	for _, state := range next {
+		seen[state] = false
+	}
+	return next
+}
+
+func (n *NFA[S]) acceptsSubset(states []int) bool {
+	for _, state := range states {
 		if n.final[state] {
 			return true
 		}

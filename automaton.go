@@ -45,11 +45,12 @@ func acceptingStates[S comparable](def Definition[S]) ([]bool, error) {
 			return nil, fmt.Errorf("%w: accepting state %d out of range", ErrInvalidDefinition, state)
 		}
 	}
+	checkSymbol := mayContainInterface(reflect.TypeFor[S]())
 	for i, edge := range def.Transitions {
 		if !valid(edge.From) || !valid(edge.To) {
 			return nil, fmt.Errorf("%w: transition %d has out-of-range states (%d, %d)", ErrInvalidDefinition, i, edge.From, edge.To)
 		}
-		if !validSymbol(edge.Symbol) {
+		if (checkSymbol && !validSymbol(edge.Symbol)) || (!checkSymbol && edge.Symbol != edge.Symbol) {
 			return nil, fmt.Errorf("%w: transition %d has an unhashable or non-reflexive symbol", ErrInvalidDefinition, i)
 		}
 	}

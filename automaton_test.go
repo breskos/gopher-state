@@ -229,6 +229,14 @@ func FuzzDeterminize(f *testing.F) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		bitset, err := nfa.NewBitsetMatcher()
+		if err != nil {
+			t.Fatal(err)
+		}
+		lazy, err := nfa.NewLazyMatcher(state.LazyDFALimits{MaxStates: 2, MaxTransitions: 4})
+		if err != nil {
+			t.Fatal(err)
+		}
 		if len(input) > 128 {
 			input = input[:128]
 		}
@@ -237,7 +245,9 @@ func FuzzDeterminize(f *testing.F) {
 			input[i] %= 3
 		}
 		want := referenceMatch(def, input)
-		if nfa.Match(input) != want || dfa.Match(input) != want {
+		if nfa.Match(input) != want || dfa.Match(input) != want ||
+			bitset.Match(input) != want || lazy.Match(input) != want || lazy.Match(input) != want ||
+			nfa.Analyze(input, state.Observer{}).Accepted != want || dfa.Analyze(input, state.Observer{}).Accepted != want {
 			t.Fatalf("compiled automata disagree with reference for %v and %v", def, input)
 		}
 	})
