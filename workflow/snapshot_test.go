@@ -248,3 +248,25 @@ func FuzzGST702RestoreWorld(f *testing.F) {
 		}
 	})
 }
+
+// TestGST100SequenceExhaustion verifies that restoring an extreme sequence
+// never wraps audit records or publishes a proposed graph extension.
+func TestGST100SequenceExhaustion(t *testing.T) {
+	world, err := loadWorld()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var records workflow.MemoryRecorder
+	run, err := world.ResumeRun(workflow.RunSnapshot{ID: "full", State: "square", Sequence: ^uint64(0)}, nil, &records)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := world.Snapshot()
+	action := decodeDiscovery(t)
+	if _, ok, err := run.ApplyAction(action); ok || !errors.Is(err, workflow.ErrSequenceExhausted) {
+		t.Fatalf("overflow action: %t, %v", ok, err)
+	}
+	if run.State() != "square" || world.Snapshot() != before || len(records.Records()) != 0 {
+		t.Fatal("overflow changed the run, graph or log")
+	}
+}

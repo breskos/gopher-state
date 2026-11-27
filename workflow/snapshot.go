@@ -1,9 +1,13 @@
 package workflow
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 )
+
+// ErrSequenceExhausted indicates that a run cannot assign another sequence number.
+var ErrSequenceExhausted = errors.New("workflow run sequence exhausted")
 
 // RunSnapshot holds the persistent identity and position of a run.
 type RunSnapshot struct {

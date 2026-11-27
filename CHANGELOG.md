@@ -4,6 +4,7 @@
 
 - **GST-100–103, GST-110–114:** Save and resume runs and archive worlds with
   stable state and transition ordering, accepted patch IDs, and provenance.
+  Sequence exhaustion returns `ErrSequenceExhausted` without advancing a run.
 - **GST-200–203:** Override randomness per step and attach application
   metadata to individual and joint records.
 - **GST-300–303, GST-400–403:** Explain rejected candidates and permanently
