@@ -699,3 +699,53 @@ committed. Persist the original graph and accepted patches in order if the
 generated graph must be reconstructed. Use a separate transaction in your
 storage layer when external resource effects and durable history must commit
 together.
+
+### Save, resume and explain workflows (v0.3.0)
+
+The [acquaintance example](examples/acquaintance/relationship.json) models
+a directed relationship from stranger to close friend, with a downgrade
+after a long period without contact:
+
+```sh
+go run ./examples/acquaintance
+```
+
+- **Save a run (GST-100–103).** `run.Snapshot()` captures its ID, current
+  state and sequence. `world.ResumeRun(snapshot, draw, recorder)` restores
+  that position and continues numbering records. The state must still be
+  present in the graph, including when it has been retired. Keep random
+  seeds or state and application facts in the application.
+- **Save a world (GST-110–114).** `world.Snapshot().Definition()` returns a
+  compilable copy in insertion order. For provenance and duplicate patch ID
+  detection after a restart, keep the original base definition and
+  `world.Patches()`, then call `RestoreWorld(base, patches)`. The current
+  definition already incorporates those patches. Pause relevant writes
+  while taking a coordinated world and run save. Individual snapshots
+  are thread-safe. `TransitionOrigin` returns the patch's ID, source and note
+  for added edges. `Graph()` includes these details for nodes and edges.
+- **Supply per-step context (GST-200–203).** `StepWith`,
+  `StepTransitionWith`, `ApplyActionWith` and encounter `StepWith` take
+  `StepOptions`. If configured, its draw overrides the run's draw for
+  that call. `TogetherWith` uses one draw source for the group. The `Meta`
+  map is copied into each successful record. The existing methods preserve
+  their default behavior.
+- **Explain choices (GST-300–303).** `Explain` on an engine, run or encounter
+  returns candidates without drawing randomness or advancing the run.
+  Eligible candidates match `Options`. Failures include paths such as
+  `when.all[1]` and `requires[0]`. A failed `any` reports all rejected
+  branches. A failed `not` reports that its operand held. Zero probability
+  is reported as `probability`; it does not change the original selection
+  policy. Encounter explanations cover private edges and mapped shared edges.
+- **Retire parts of the graph (GST-400–403).** Use `Patch.Retire.States` or
+  `Patch.Retire.Transitions`. Retired parts remain in definition exports
+  and patch history. Edges entering retired states are unavailable, while
+  people already there can leave through eligible edges. To replace a
+  retired edge, create a new edge with a new ID and an active target.
+- **Inspect the graph (GST-500).** `Engine.Graph()` exposes ordered node
+  and edge copies for a renderer. It flags edges whose destinations are
+  retired and reports publication provenance. `Definition()` is the
+  round-trip format; it preserves the declared edge retirement separately
+  from retirement of its target.
+
+The example uses JSON in memory. Consumers decide where to store it and
+when to restore. See the [changelog](CHANGELOG.md) for migration notes.

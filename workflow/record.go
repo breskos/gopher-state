@@ -11,16 +11,17 @@ import (
 // Condition combines requirements and when. Facts includes present operands
 // referenced by the rule, keeping unrelated event data out of the log.
 type Record struct {
-	RunID       string     `json:"runId"`
-	Sequence    uint64     `json:"sequence"`
-	Decision    Decision   `json:"decision"`
-	Selection   Selection  `json:"selection"`
-	Weight      uint64     `json:"weight,omitempty"`
-	Probability float64    `json:"probability"`
-	Condition   *Condition `json:"condition,omitempty"`
-	Facts       Facts      `json:"facts,omitempty"`
-	Encounter   string     `json:"encounter,omitempty"`
-	Shared      *Decision  `json:"shared,omitempty"`
+	Meta        map[string]json.RawMessage `json:"meta,omitempty"`
+	RunID       string                     `json:"runId"`
+	Sequence    uint64                     `json:"sequence"`
+	Decision    Decision                   `json:"decision"`
+	Selection   Selection                  `json:"selection"`
+	Weight      uint64                     `json:"weight,omitempty"`
+	Probability float64                    `json:"probability"`
+	Condition   *Condition                 `json:"condition,omitempty"`
+	Facts       Facts                      `json:"facts,omitempty"`
+	Encounter   string                     `json:"encounter,omitempty"`
+	Shared      *Decision                  `json:"shared,omitempty"`
 }
 
 // Recorder receives a transition record before a run advances. Recorders
@@ -80,6 +81,7 @@ func (m *MemoryRecorder) Records() []Record {
 
 func cloneRecord(record Record) Record {
 	record.Facts = maps.Clone(record.Facts)
+	record.Meta = cloneMetadata(record.Meta)
 	if record.Shared != nil {
 		shared := *record.Shared
 		record.Shared = &shared

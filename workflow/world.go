@@ -12,6 +12,8 @@ import (
 // Patch adds states and transitions to a world. Targets may refer to existing
 // states or to states in the same patch.
 type Patch struct {
+	Info        PatchInfo    `json:"info,omitzero"`
+	Retire      Retire       `json:"retire,omitzero"`
 	States      []string     `json:"states,omitempty"`
 	Transitions []Transition `json:"transitions,omitempty"`
 }
@@ -19,8 +21,10 @@ type Patch struct {
 // World holds a live, append-only workflow graph shared by independent runs.
 // Each step uses one immutable snapshot. Do not copy a World.
 type World struct {
-	mu     sync.Mutex
-	engine atomic.Pointer[Engine]
+	mu       sync.Mutex
+	engine   atomic.Pointer[Engine]
+	patches  []Patch
+	patchIDs map[string]struct{}
 }
 
 // NewWorld creates a world from a compiled engine. Patches to the world leave
@@ -29,7 +33,7 @@ func NewWorld(engine *Engine) (*World, error) {
 	if engine == nil || engine.states[engine.start] == nil {
 		return nil, fmt.Errorf("%w: world requires a compiled engine", ErrInvalidDefinition)
 	}
-	w := &World{}
+	w := &World{patchIDs: make(map[string]struct{})}
 	w.engine.Store(engine)
 	return w, nil
 }
@@ -56,11 +60,11 @@ func (w *World) Add(patch Patch) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	next, err := extend(w.Snapshot(), patch)
+	next, err := w.preparePatch(patch)
 	if err != nil {
 		return err
 	}
-	w.engine.Store(next)
+	w.publishPatch(next, patch)
 	return nil
 }
 
@@ -68,10 +72,25 @@ func extend(old *Engine, patch Patch) (*Engine, error) {
 	if old == nil {
 		return nil, fmt.Errorf("%w: uninitialized world", ErrInvalidDefinition)
 	}
-	if len(patch.States) == 0 && len(patch.Transitions) == 0 {
+	if patch.empty() {
 		return old, nil
 	}
-	next := &Engine{start: old.start, states: maps.Clone(old.states), metadata: maps.Clone(old.metadata)}
+	if len(patch.Retire.States) != 0 || len(patch.Retire.Transitions) != 0 {
+		def := old.definition
+		def.States = append(slices.Clip(def.States), patch.States...)
+		def.Transitions = append(slices.Clip(slices.Clone(def.Transitions)), patch.Transitions...)
+		def.RetiredStates = slices.Clip(def.RetiredStates)
+		next, err := retire(def, patch.Retire)
+		if err != nil {
+			return nil, err
+		}
+		next.setOrigins(old, patch)
+		return next, nil
+	}
+	next := &Engine{
+		start: old.start, states: maps.Clone(old.states), metadata: maps.Clone(old.metadata),
+		definition: old.definition, retired: old.retired,
+	}
 	changedStates := make(map[string]bool)
 	for _, state := range patch.States {
 		if state == "" || next.states[state] != nil {
@@ -100,7 +119,35 @@ func extend(old *Engine, patch Patch) (*Engine, error) {
 			return nil, fmt.Errorf("%w: patch transition %d (%q): %w", ErrInvalidDefinition, i, t.ID, err)
 		}
 	}
+	next.definition.States = append(slices.Clip(old.definition.States), patch.States...)
+	next.definition.Transitions = append(slices.Clip(old.definition.Transitions), cloneTransitions(patch.Transitions)...)
+	next.setOrigins(old, patch)
 	return next, nil
+}
+
+func (next *Engine) setOrigins(old *Engine, patch Patch) {
+	next.stateOrigins, next.origins = old.stateOrigins, old.origins
+	if patch.Info == (PatchInfo{}) {
+		return
+	}
+	if len(patch.States) != 0 {
+		next.stateOrigins = maps.Clone(old.stateOrigins)
+		if next.stateOrigins == nil {
+			next.stateOrigins = make(map[string]PatchInfo)
+		}
+		for _, state := range patch.States {
+			next.stateOrigins[state] = patch.Info
+		}
+	}
+	if len(patch.Transitions) != 0 {
+		next.origins = maps.Clone(old.origins)
+		if next.origins == nil {
+			next.origins = make(map[string]PatchInfo)
+		}
+		for _, transition := range patch.Transitions {
+			next.origins[transition.ID] = patch.Info
+		}
+	}
 }
 
 // Run tracks one person's state and records successful transitions if a
@@ -136,30 +183,36 @@ func (r *Run) State() string {
 // must succeed before the state advances. A recorder should not call methods
 // on the same Run. Use the returned Decision to apply application effects.
 func (r *Run) Step(event string, facts Facts) (Decision, bool, error) {
+	return r.StepWith(event, facts, StepOptions{})
+}
+
+// StepWith processes one event with per-step randomness and recorder metadata.
+func (r *Run) StepWith(event string, facts Facts, opt StepOptions) (Decision, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.stepOn(r.world.Snapshot(), event, "", facts)
+	return r.stepOn(r.world.Snapshot(), event, "", facts, opt)
 }
 
-func (r *Run) stepOn(engine *Engine, event, transition string, facts Facts) (Decision, bool, error) {
+func (r *Run) stepOn(engine *Engine, event, transition string, facts Facts, opt StepOptions) (Decision, bool, error) {
 	var selected *edge
 	var selection Selection
 	var err error
+	draw := opt.draw(r.draw)
 	if transition == "" {
-		selected, selection, err = engine.choose(r.state, event, facts, r.draw)
+		selected, selection, err = engine.choose(r.state, event, facts, draw)
 	} else {
-		selected, selection, err = engine.chooseExplicit(r.state, event, transition, facts, r.draw)
+		selected, selection, err = engine.chooseExplicit(r.state, event, transition, facts, draw)
 	}
 	if err != nil || selected == nil {
 		return Decision{}, false, err
 	}
-	return r.advance(selected, selection, selected.decision(r.state, event), facts, "", nil)
+	return r.advance(selected, selection, selected.decision(r.state, event), facts, "", nil, opt)
 }
 
-func (r *Run) advance(selected *edge, selection Selection, decision Decision, facts Facts, encounter string, shared *Decision) (Decision, bool, error) {
+func (r *Run) advance(selected *edge, selection Selection, decision Decision, facts Facts, encounter string, shared *Decision, opt StepOptions) (Decision, bool, error) {
 	if r.recorder != nil {
-		record := r.record(selected, selection, decision, facts, encounter, shared)
+		record := r.record(selected, selection, decision, facts, encounter, shared, opt)
 		if err := r.recorder.WriteRecord(record); err != nil {
 			return Decision{}, false, fmt.Errorf("record run %q transition %d: %w", r.id, record.Sequence, err)
 		}
@@ -169,12 +222,12 @@ func (r *Run) advance(selected *edge, selection Selection, decision Decision, fa
 	return decision, true, nil
 }
 
-func (r *Run) record(selected *edge, selection Selection, decision Decision, facts Facts, encounter string, shared *Decision) Record {
+func (r *Run) record(selected *edge, selection Selection, decision Decision, facts Facts, encounter string, shared *Decision, opt StepOptions) Record {
 	record := Record{
 		RunID: r.id, Sequence: r.sequence + 1, Decision: decision,
 		Selection: selection, Weight: selected.weight,
 		Probability: float64(selected.chance) / probabilityScale,
-		Encounter:   encounter, Shared: shared,
+		Encounter:   encounter, Shared: shared, Meta: cloneMetadata(opt.Meta),
 	}
 	if selected.when != nil {
 		record.Facts = make(Facts)
