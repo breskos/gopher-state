@@ -44,3 +44,8 @@ jobs:
       - name: Fuzz NFA matching and determinization
         if: runner.os == 'Linux' && matrix.go == 'stable'
         run: go test -run '^$' -fuzz '^FuzzDeterminize$' -fuzztime=15s -parallel=2 .
+      - name: Fuzz workflow restoration
+        if: runner.os == 'Linux' && matrix.go == 'stable'
+        run: |
+          go test -run '^$' -fuzz '^FuzzGST701ResumeRun$' -fuzztime=15s -parallel=2 ./workflow
+          go test -run '^$' -fuzz '^FuzzGST702RestoreWorld$' -fuzztime=15s -parallel=2 ./workflow
