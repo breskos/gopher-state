@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "start": "stranger",
+  "states": ["stranger", "familiar", "acquainted", "friend", "close-friend"],
+  "transitions": [
+    {"id": "meet", "from": "stranger", "to": "familiar", "event": "talk",
+     "requires": [{"field": "meetings", "atLeast": 1}]},
+    {"id": "get-acquainted", "from": "familiar", "to": "acquainted", "event": "talk",
+     "requires": [{"field": "meetings", "atLeast": 3}]},
+    {"id": "become-friends", "from": "acquainted", "to": "friend", "event": "talk",
+     "when": {"field": "trust", "op": "gte", "value": 0.6}, "probability": 0.8},
+    {"id": "grow-closer", "from": "friend", "to": "close-friend", "event": "talk",
+     "when": {"all": [{"field": "affection", "op": "gte", "value": 0.8}, {"field": "trust", "op": "gte", "value": 0.8}]}},
+    {"id": "drift-apart", "from": "close-friend", "to": "friend", "event": "review",
+     "requires": [{"field": "daysWithoutContact", "atLeast": {"amount": 30, "unit": "day"}}]}
+  ]
+}

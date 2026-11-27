@@ -32,15 +32,17 @@ const (
 
 // Definition is the portable workflow model. Version must be 1.
 type Definition struct {
-	Version     int          `json:"version"`
-	Start       string       `json:"start"`
-	States      []string     `json:"states"`
-	Transitions []Transition `json:"transitions"`
+	Version       int          `json:"version"`
+	Start         string       `json:"start"`
+	States        []string     `json:"states"`
+	Transitions   []Transition `json:"transitions"`
+	RetiredStates []string     `json:"retiredStates,omitempty"`
 }
 
 // Transition describes one possible move. Metadata is application-defined and
 // does not affect eligibility or selection.
 type Transition struct {
+	Retired   bool          `json:"retired,omitempty"`
 	ID        string        `json:"id"`
 	From      string        `json:"from"`
 	To        string        `json:"to"`
@@ -61,10 +63,12 @@ type Requirement struct {
 }
 
 type edge struct {
-	id, to string
-	when   *predicate
-	weight uint64
-	chance uint64
+	id, to       string
+	when         *predicate
+	weight       uint64
+	chance       uint64
+	retired      bool
+	requirements int
 }
 
 const probabilityScale = 1 << 53
@@ -77,9 +81,13 @@ type group struct {
 
 // Engine executes a validated definition. Each call is independent.
 type Engine struct {
-	start    string
-	states   map[string]map[string]*group
-	metadata map[string]map[string]json.RawMessage
+	definition   Definition
+	retired      map[string]bool
+	origins      map[string]PatchInfo
+	stateOrigins map[string]PatchInfo
+	start        string
+	states       map[string]map[string]*group
+	metadata     map[string]map[string]json.RawMessage
 }
 
 // Compile validates a definition and indexes transitions by source and event.
@@ -97,6 +105,13 @@ func Compile(def Definition) (*Engine, error) {
 		}
 		engine.states[state] = make(map[string]*group)
 	}
+	engine.retired = make(map[string]bool, len(def.RetiredStates))
+	for _, state := range def.RetiredStates {
+		if engine.states[state] == nil || engine.retired[state] {
+			return nil, fmt.Errorf("%w: unknown or duplicate retired state %q", ErrInvalidDefinition, state)
+		}
+		engine.retired[state] = true
+	}
 	if engine.states[def.Start] == nil {
 		return nil, fmt.Errorf("%w: unknown start state %q", ErrInvalidDefinition, def.Start)
 	}
@@ -105,6 +120,7 @@ func Compile(def Definition) (*Engine, error) {
 			return nil, fmt.Errorf("%w: transition %d (%q): %w", ErrInvalidDefinition, i, t.ID, err)
 		}
 	}
+	engine.definition = cloneDefinition(def)
 	return engine, nil
 }
 
@@ -127,20 +143,23 @@ func (e *Engine) add(t Transition) error {
 	} else if g.selection != selection {
 		return fmt.Errorf("mixed selection modes for the same source and event")
 	}
+	retired := t.Retired || e.retired[t.To]
 	switch selection {
 	case First:
 		if t.Weight != 0 {
 			return fmt.Errorf("weight is only valid with weighted selection")
 		}
 	case Weighted:
-		if t.Weight == 0 || t.Weight > ^uint64(0)-g.weight {
+		if t.Weight == 0 || (!retired && t.Weight > ^uint64(0)-g.weight) {
 			return fmt.Errorf("weights must be positive and their sum must fit in uint64")
 		}
-		g.weight += t.Weight
+		if !retired {
+			g.weight += t.Weight
+		}
 	default:
 		return fmt.Errorf("unknown selection %q", selection)
 	}
-	compiled := edge{id: t.ID, to: t.To, weight: t.Weight, chance: probabilityScale}
+	compiled := edge{id: t.ID, to: t.To, weight: t.Weight, chance: probabilityScale, retired: retired}
 	if t.Probability != nil {
 		p := *t.Probability
 		if !(p >= 0 && p <= 1) {
@@ -153,6 +172,7 @@ func (e *Engine) add(t Transition) error {
 		return err
 	}
 	compiled.when = when
+	compiled.requirements = len(t.Requires)
 	for name, value := range t.Metadata {
 		if !json.Valid(value) {
 			return fmt.Errorf("invalid JSON metadata at %q", name)
@@ -270,7 +290,7 @@ func (t *edge) passesChance(draw Draw) (bool, error) {
 }
 
 func (t *edge) eligible(facts Facts) bool {
-	return t.when == nil || t.when.evaluate(facts)
+	return !t.retired && (t.when == nil || t.when.evaluate(facts))
 }
 
 func (g *group) selectEdge(facts Facts, draw Draw) (*edge, error) {

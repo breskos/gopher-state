@@ -33,12 +33,17 @@ func (r *Run) Options(event string, facts Facts) []Option {
 // Its execution probability still applies. An invalid or no longer eligible
 // choice leaves the run unchanged.
 func (r *Run) StepTransition(event, transition string, facts Facts) (Decision, bool, error) {
+	return r.StepTransitionWith(event, transition, facts, StepOptions{})
+}
+
+// StepTransitionWith attempts an explicit edge with per-step options.
+func (r *Run) StepTransitionWith(event, transition string, facts Facts, opt StepOptions) (Decision, bool, error) {
 	if transition == "" {
 		return Decision{}, false, fmt.Errorf("%w: transition ID is required", ErrInvalidDefinition)
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.stepOn(r.world.Snapshot(), event, transition, facts)
+	return r.stepOn(r.world.Snapshot(), event, transition, facts, opt)
 }
 
 func (e *Engine) chooseExplicit(current, event, transition string, facts Facts, draw Draw) (*edge, Selection, error) {
@@ -79,24 +84,29 @@ type Action struct {
 // remain the caller's responsibility. Callbacks must not mutate this world or
 // reenter the run during the action.
 func (r *Run) ApplyAction(action Action) (Decision, bool, error) {
+	return r.ApplyActionWith(action, StepOptions{})
+}
+
+// ApplyActionWith applies a processor action with per-step options.
+func (r *Run) ApplyActionWith(action Action, opt StepOptions) (Decision, bool, error) {
 	if action.Transition == "" {
 		return Decision{}, false, fmt.Errorf("%w: transition ID is required", ErrInvalidDefinition)
 	}
-	if len(action.Patch.States) == 0 && len(action.Patch.Transitions) == 0 {
-		return r.StepTransition(action.Event, action.Transition, action.Facts)
+	if action.Patch.empty() && action.Patch.Info == (PatchInfo{}) {
+		return r.StepTransitionWith(action.Event, action.Transition, action.Facts, opt)
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.world.mu.Lock()
 	defer r.world.mu.Unlock()
-	next, err := extend(r.world.Snapshot(), action.Patch)
+	next, err := r.world.preparePatch(action.Patch)
 	if err != nil {
 		return Decision{}, false, err
 	}
-	decision, ok, err := r.stepOn(next, action.Event, action.Transition, action.Facts)
+	decision, ok, err := r.stepOn(next, action.Event, action.Transition, action.Facts, opt)
 	if err == nil && ok {
-		r.world.engine.Store(next)
+		r.world.publishPatch(next, action.Patch)
 	}
 	return decision, ok, err
 }

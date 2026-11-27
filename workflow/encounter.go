@@ -96,7 +96,8 @@ func (e *Encounter) Options(r *Run, event string, facts Facts) []Option {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	options := r.world.Snapshot().Options(r.state, event, facts)
+	private := r.world.Snapshot()
+	options := private.Options(r.state, event, facts)
 	mapping := e.people[r]
 	from := mapping.shared[r.state]
 	if e.closed || from == "" {
@@ -106,7 +107,7 @@ func (e *Encounter) Options(r *Run, event string, facts Facts) []Option {
 	if public != nil {
 		for i := range public.edges {
 			t := &public.edges[i]
-			if to := mapping.local[t.to]; to != "" && t.chance != 0 && t.eligible(facts) {
+			if to := mapping.local[t.to]; to != "" && !private.retired[to] && t.chance != 0 && t.eligible(facts) {
 				shared := t.decision(from, event)
 				local := Decision{Transition: t.id, From: r.state, To: to, Event: event}
 				options = append(options, makeOption(Shared, local, &shared, t, public.selection))
@@ -127,6 +128,11 @@ func makeOption(scope Scope, decision Decision, shared *Decision, t *edge, selec
 // uses the graph's selection policy. An explicit eligible ID skips relative
 // selection and still applies its execution probability.
 func (e *Encounter) Step(r *Run, scope Scope, event, transition string, facts Facts) (Decision, bool, error) {
+	return e.StepWith(r, scope, event, transition, facts, StepOptions{})
+}
+
+// StepWith executes one private or shared move with per-step options.
+func (e *Encounter) StepWith(r *Run, scope Scope, event, transition string, facts Facts, opt StepOptions) (Decision, bool, error) {
 	if r == nil || r.world == nil {
 		return Decision{}, false, fmt.Errorf("%w: initialized run required", ErrInvalidDefinition)
 	}
@@ -137,7 +143,7 @@ func (e *Encounter) Step(r *Run, scope Scope, event, transition string, facts Fa
 
 	switch scope {
 	case Private:
-		return r.stepOn(r.world.Snapshot(), event, transition, facts)
+		return r.stepOn(r.world.Snapshot(), event, transition, facts, opt)
 	case Shared:
 		mapping := e.people[r]
 		from := mapping.shared[r.state]
@@ -145,15 +151,17 @@ func (e *Encounter) Step(r *Run, scope Scope, event, transition string, facts Fa
 			return Decision{}, false, nil
 		}
 		g := e.world.Snapshot().states[from][event]
-		selected, err := chooseMeetingEdge(g, transition, r.draw, func(t *edge) bool {
-			return mapping.local[t.to] != "" && t.eligible(facts)
+		private := r.world.Snapshot()
+		selected, err := chooseMeetingEdge(g, transition, opt.draw(r.draw), func(t *edge) bool {
+			to := mapping.local[t.to]
+			return to != "" && !private.retired[to] && t.eligible(facts)
 		})
 		if err != nil || selected == nil {
 			return Decision{}, false, err
 		}
 		shared := selected.decision(from, event)
 		local := Decision{Transition: selected.id, From: r.state, To: mapping.local[selected.to], Event: event}
-		return r.advance(selected, g.selection, local, facts, e.id, &shared)
+		return r.advance(selected, g.selection, local, facts, e.id, &shared, opt)
 	default:
 		return Decision{}, false, fmt.Errorf("%w: unknown scope %q", ErrInvalidDefinition, scope)
 	}
@@ -170,6 +178,12 @@ type Turn struct {
 // Results are returned in the supplied order. If any selected run has a
 // recorder, supply a group recorder to persist those records together.
 func (e *Encounter) Together(event, transition string, people []Turn, draw Draw, recorder GroupRecorder) ([]Decision, bool, error) {
+	return e.TogetherWith(event, transition, people, StepOptions{Draw: draw}, recorder)
+}
+
+// TogetherWith executes a joint move with one group draw source and metadata
+// copied into each participant's record.
+func (e *Encounter) TogetherWith(event, transition string, people []Turn, opt StepOptions, recorder GroupRecorder) ([]Decision, bool, error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	if e.closed {
@@ -215,10 +229,15 @@ func (e *Encounter) Together(event, transition string, people []Turn, draw Draw,
 	if logging && recorder == nil {
 		return nil, false, fmt.Errorf("%w: joint logging requires a group recorder", ErrInvalidDefinition)
 	}
+	private := make([]*Engine, len(people))
+	for i, turn := range people {
+		private[i] = turn.Run.world.Snapshot()
+	}
 	g := e.world.Snapshot().states[from][event]
-	selected, err := chooseMeetingEdge(g, transition, draw, func(t *edge) bool {
-		for _, turn := range people {
-			if e.people[turn.Run].local[t.to] == "" || !t.eligible(turn.Facts) {
+	selected, err := chooseMeetingEdge(g, transition, opt.Draw, func(t *edge) bool {
+		for i, turn := range people {
+			to := e.people[turn.Run].local[t.to]
+			if to == "" || private[i].retired[to] || !t.eligible(turn.Facts) {
 				return false
 			}
 		}
@@ -236,7 +255,7 @@ func (e *Encounter) Together(event, transition string, people []Turn, draw Draw,
 		local := Decision{Transition: selected.id, From: r.state, To: e.people[r].local[selected.to], Event: event}
 		results[i] = local
 		if r.recorder != nil {
-			records = append(records, r.record(selected, g.selection, local, turn.Facts, e.id, &shared))
+			records = append(records, r.record(selected, g.selection, local, turn.Facts, e.id, &shared, opt))
 		}
 	}
 	if len(records) != 0 {
