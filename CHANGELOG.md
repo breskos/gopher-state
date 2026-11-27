@@ -10,8 +10,10 @@
 - **GST-300–303, GST-400–403:** Explain rejected candidates and permanently
   retire edges or states without erasing their history.
 - **GST-500:** Inspect ordered nodes and edges with retirement and provenance.
+- **GST-501:** Export workflow graphs as Graphviz DOT for visualization.
 - **GST-600–601, GST-700–703:** Add the acquaintance example, persistence
   and eligibility tests, fuzz targets, and benchmark verification.
+- Run both workflow restoration fuzz targets in CI.
 
 ### Migration from v0.2.0
 

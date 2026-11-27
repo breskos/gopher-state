@@ -751,3 +751,24 @@ go run ./examples/acquaintance
 
 The example uses JSON in memory. Consumers decide where to store it and
 when to restore. See the [changelog](CHANGELOG.md) for migration notes.
+
+#### Render a workflow graph with Graphviz
+
+`engine.Graph().WriteDOT(writer)` exports a workflow as a directed DOT
+graph. The start state has an incoming arrow, labels contain the event and
+transition ID, and retired states and edges have dashed outlines. The export
+uses the current graph snapshot and returns write and graph validation errors.
+
+```go
+if err := engine.Graph().WriteDOT(os.Stdout); err != nil {
+    return err
+}
+```
+
+Save the output as `workflow.dot` and use `dot -Tsvg workflow.dot -o workflow.svg`
+with Graphviz installed. DOT export uses the Go standard library and does not
+require Graphviz at runtime.
+
+CI runs the DFA/NFA fuzz target and both GST-701 and GST-702 workflow
+restoration fuzz targets on stable Go. The local verification commands above
+can be used to run them for longer.
