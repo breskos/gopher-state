@@ -1,0 +1,33 @@
+{
+  "event": "discover",
+  "transition": "enter-hidden-garden",
+  "facts": {"hasKey": true},
+  "patch": {
+    "states": ["hidden-garden", "greenhouse", "fountain"],
+    "transitions": [
+      {
+        "id": "enter-hidden-garden",
+        "from": "square",
+        "to": "hidden-garden",
+        "event": "discover",
+        "when": {"field": "hasKey", "op": "eq", "value": true}
+      },
+      {
+        "id": "visit-greenhouse",
+        "from": "hidden-garden",
+        "to": "greenhouse",
+        "event": "explore",
+        "selection": "weighted",
+        "weight": 3
+      },
+      {
+        "id": "visit-fountain",
+        "from": "hidden-garden",
+        "to": "fountain",
+        "event": "explore",
+        "selection": "weighted",
+        "weight": 1
+      }
+    ]
+  }
+}

@@ -56,18 +56,26 @@ func (w *World) Add(patch Patch) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	old := w.Snapshot()
+	next, err := extend(w.Snapshot(), patch)
+	if err != nil {
+		return err
+	}
+	w.engine.Store(next)
+	return nil
+}
+
+func extend(old *Engine, patch Patch) (*Engine, error) {
 	if old == nil {
-		return fmt.Errorf("%w: uninitialized world", ErrInvalidDefinition)
+		return nil, fmt.Errorf("%w: uninitialized world", ErrInvalidDefinition)
 	}
 	if len(patch.States) == 0 && len(patch.Transitions) == 0 {
-		return nil
+		return old, nil
 	}
 	next := &Engine{start: old.start, states: maps.Clone(old.states), metadata: maps.Clone(old.metadata)}
 	changedStates := make(map[string]bool)
 	for _, state := range patch.States {
 		if state == "" || next.states[state] != nil {
-			return fmt.Errorf("%w: empty or duplicate state %q", ErrInvalidDefinition, state)
+			return nil, fmt.Errorf("%w: empty or duplicate state %q", ErrInvalidDefinition, state)
 		}
 		next.states[state] = make(map[string]*group)
 		changedStates[state] = true
@@ -89,11 +97,10 @@ func (w *World) Add(patch Patch) error {
 			changedGroups[key] = true
 		}
 		if err := next.add(t); err != nil {
-			return fmt.Errorf("%w: patch transition %d (%q): %w", ErrInvalidDefinition, i, t.ID, err)
+			return nil, fmt.Errorf("%w: patch transition %d (%q): %w", ErrInvalidDefinition, i, t.ID, err)
 		}
 	}
-	w.engine.Store(next)
-	return nil
+	return next, nil
 }
 
 // Run tracks one person's state and records successful transitions if a
@@ -132,12 +139,22 @@ func (r *Run) Step(event string, facts Facts) (Decision, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	selected, selection, err := r.world.Snapshot().choose(r.state, event, facts, r.draw)
+	return r.stepOn(r.world.Snapshot(), event, "", facts)
+}
+
+func (r *Run) stepOn(engine *Engine, event, transition string, facts Facts) (Decision, bool, error) {
+	var selected *edge
+	var selection Selection
+	var err error
+	if transition == "" {
+		selected, selection, err = engine.choose(r.state, event, facts, r.draw)
+	} else {
+		selected, selection, err = engine.chooseExplicit(r.state, event, transition, facts, r.draw)
+	}
 	if err != nil || selected == nil {
 		return Decision{}, false, err
 	}
-	decision := selected.decision(r.state, event)
-	return r.advance(selected, selection, decision, facts, "", nil)
+	return r.advance(selected, selection, selected.decision(r.state, event), facts, "", nil)
 }
 
 func (r *Run) advance(selected *edge, selection Selection, decision Decision, facts Facts, encounter string, shared *Decision) (Decision, bool, error) {
