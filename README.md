@@ -772,3 +772,7 @@ require Graphviz at runtime.
 CI runs the DFA/NFA fuzz target and both GST-701 and GST-702 workflow
 restoration fuzz targets on stable Go. The local verification commands above
 can be used to run them for longer.
+
+## License
+
+gopher-state is licensed under the [Apache License, Version 2.0](LICENSE).

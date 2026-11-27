@@ -262,7 +262,7 @@ z. B. `zuneigung`, `vertrauen`, `begegnungen`, `tageOhneKontakt`. Das Beispiel z
 | ID | Frage | Stand |
 |---|---|---|
 | OFS-01 | Bleibt der Automaten-Teil (DFA, NFA, Matcher, `dfa/`) im Repository oder wird gopher-state auf `workflow` verschlankt? urbs42 braucht ihn nicht. | offen |
-| OFS-02 | Lizenz: Die GPL-3.0-Datei `LICENSE` ist im Arbeitsstand vom 27.11.2026 gelöscht (noch nicht committet); ohne Lizenzdatei gilt „alle Rechte vorbehalten“. Repository ist privat, Auftraggeber ist alleiniger Urheber. So lassen, oder eine Lizenz (z. B. Apache-2.0 wie gopher-learn) bzw. ein proprietärer Hinweis? | offen |
+| OFS-02 | Lizenz für das öffentliche Repository | Apache-2.0 vom Auftraggeber gewählt |
 | OFS-03 | Typ von `Meta`: `map[string]json.RawMessage` (Vorschlag, wie `Metadata`) oder ein eigener Typ | Vorschlag |
 | OFS-04 | Go-Version: bleibt 1.25; urbs42 zieht von 1.24 nach | Vorschlag |
 
