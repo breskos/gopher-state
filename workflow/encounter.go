@@ -246,6 +246,11 @@ func (e *Encounter) TogetherWith(event, transition string, people []Turn, opt St
 	if err != nil || selected == nil {
 		return nil, false, err
 	}
+	for _, turn := range people {
+		if turn.Run.sequence == ^uint64(0) {
+			return nil, false, ErrSequenceExhausted
+		}
+	}
 
 	shared := selected.decision(from, event)
 	results := make([]Decision, len(people))

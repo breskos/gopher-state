@@ -211,6 +211,9 @@ func (r *Run) stepOn(engine *Engine, event, transition string, facts Facts, opt 
 }
 
 func (r *Run) advance(selected *edge, selection Selection, decision Decision, facts Facts, encounter string, shared *Decision, opt StepOptions) (Decision, bool, error) {
+	if r.sequence == ^uint64(0) {
+		return Decision{}, false, ErrSequenceExhausted
+	}
 	if r.recorder != nil {
 		record := r.record(selected, selection, decision, facts, encounter, shared, opt)
 		if err := r.recorder.WriteRecord(record); err != nil {

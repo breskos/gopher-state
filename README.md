@@ -714,7 +714,9 @@ go run ./examples/acquaintance
   state and sequence. `world.ResumeRun(snapshot, draw, recorder)` restores
   that position and continues numbering records. The state must still be
   present in the graph, including when it has been retired. Keep random
-  seeds or state and application facts in the application.
+  seeds or state and application facts in the application. Once the saved
+  sequence reaches the maximum uint64 value, a successful transition returns
+  `ErrSequenceExhausted` without changing the run or publishing its patch.
 - **Save a world (GST-110–114).** `world.Snapshot().Definition()` returns a
   compilable copy in insertion order. For provenance and duplicate patch ID
   detection after a restart, keep the original base definition and

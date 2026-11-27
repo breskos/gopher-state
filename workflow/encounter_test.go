@@ -394,3 +394,32 @@ func FuzzEncounterJointSelection(f *testing.F) {
 		}
 	})
 }
+
+// TestGST102JointSequenceExhaustion ensures a joint run never partially advances.
+func TestGST102JointSequenceExhaustion(t *testing.T) {
+	engine, err := workflow.ReadJSON(bytes.NewReader(festival), 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	world, err := workflow.NewWorld(engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := world.ResumeRun(workflow.RunSnapshot{ID: "first", State: "square", Sequence: ^uint64(0)}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := world.NewRun("second", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := map[string]string{"square": "square", "stage": "stage", "food-stall": "food-stall"}
+	encounter, err := workflow.NewEncounter("meeting", world, []workflow.Binding{{Run: first, States: binding}, {Run: second, States: binding}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, ok, err := encounter.Together("choose", "visit-food-stall", []workflow.Turn{{Run: first}, {Run: second}}, nil, nil)
+	if ok || !errors.Is(err, workflow.ErrSequenceExhausted) || first.State() != "square" || second.State() != "square" {
+		t.Fatalf("joint overflow: %t, %v", ok, err)
+	}
+}
